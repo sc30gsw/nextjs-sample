@@ -17,7 +17,7 @@ type StaticProps = {
   posts: Post[]
 }
 
-export const getStaticProps: GetStaticProps<StaticProps> = async () => {
+export const getPosts = async () => {
   const database = await notion.databases.query({
     // DB接続
     database_id: process.env.NOTION_DATABASE_ID as string,
@@ -136,6 +136,11 @@ export const getStaticProps: GetStaticProps<StaticProps> = async () => {
       contents,
     })
   })
+  return posts
+}
+
+export const getStaticProps: GetStaticProps<StaticProps> = async () => {
+  const posts = await getPosts()
   return { props: { posts } }
 }
 
