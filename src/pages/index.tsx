@@ -3,6 +3,7 @@ import type { GetStaticProps, NextPage } from 'next'
 
 import type { Content } from '@/types/content'
 import type { Post } from '@/types/post'
+import { notojp } from '@/utils/font'
 
 const notion = new Client({
   auth: process.env.NOTION_TOKEN,
@@ -144,8 +145,14 @@ export const getStaticProps: GetStaticProps<StaticProps> = async () => {
 }
 
 const Home: NextPage<StaticProps> = ({ post }) => {
-  console.log(post)
-  return <div></div>
+  if (!post) return
+  return (
+    <div className={`m-auto min-h-[100vh] max-w-[800px] ${notojp.className}`}>
+      <div className="mb-4 p-2">
+        <h1 className="my-4 text-2xl font-bold">{post.title}</h1>
+      </div>
+    </div>
+  )
 }
 
 export default Home
