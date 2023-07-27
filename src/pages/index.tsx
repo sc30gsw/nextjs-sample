@@ -1,11 +1,18 @@
 import { Client } from '@notionhq/client'
-import type { GetStaticProps } from 'next'
+import type { GetStaticProps, NextPage } from 'next'
+
+import type { Content } from '@/types/content'
+import type { Post } from '@/types/post'
 
 const notion = new Client({
   auth: process.env.NOTION_TOKEN,
 })
 
-export const getStaticProps: GetStaticProps<{}> = async () => {
+type StaticProps = {
+  post: Post | null
+}
+
+export const getStaticProps: GetStaticProps<StaticProps> = async () => {
   const database = await notion.databases.query({
     // DB接続
     database_id: process.env.NOTION_DATABASE_ID as string,
@@ -29,18 +36,115 @@ export const getStaticProps: GetStaticProps<{}> = async () => {
     ],
   })
 
-  console.dir(database, { depth: null })
+  const page = database.results[1]
+
+  if (!page) {
+    return {
+      props: {
+        post: null,
+      },
+    }
+  }
+
+  if (!('properties' in page)) {
+    return {
+      props: {
+        post: {
+          id: page.id,
+          title: null,
+          slug: null,
+          createdTs: null,
+          lastEditedTs: null,
+          contents: [],
+        },
+      },
+    }
+  }
+
+  let title: string | null = null
+  if (
+    page.properties['Name'].type === 'title' &&
+    Array.isArray(page.properties['Name'].title)
+  ) {
+    title = page.properties['Name'].title[0]?.plain_text ?? null
+  }
+
+  let slug: string | null = null
+  if (
+    page.properties['Slug'].type === 'rich_text' &&
+    Array.isArray(page.properties['Slug'].rich_text)
+  ) {
+    console.log(page.properties['Slug'].rich_text[0]?.plain_text)
+    slug = page.properties['Slug'].rich_text[0]?.plain_text ?? null
+  }
 
   const blocks = await notion.blocks.children.list({
-    block_id: database.results[1]?.id,
+    block_id: page.id,
   })
 
-  console.dir(blocks, { depth: null })
+  const contents: Content[] = []
+  blocks.results.forEach((block) => {
+    if (!('type' in block)) {
+      return
+    }
 
-  return { props: {} }
+    switch (block.type) {
+      case 'paragraph':
+        contents.push({
+          type: 'paragraph',
+          text: block.paragraph.rich_text[0]?.plain_text ?? null,
+        })
+        break
+
+      case 'heading_2':
+        contents.push({
+          type: 'heading_2',
+          text: block.heading_2.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'heading_3':
+        contents.push({
+          type: 'heading_3',
+          text: block.heading_3.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'quote':
+        contents.push({
+          type: 'quote',
+          text: block.quote.rich_text[0]?.plain_text ?? null,
+        })
+        break
+
+      case 'code':
+        contents.push({
+          type: 'code',
+          text: block.code.rich_text[0]?.plain_text ?? null,
+          language: block.code.language,
+        })
+        break
+    }
+  })
+
+  const post: Post = {
+    id: page.id,
+    title,
+    slug,
+    createdTs: (page as any).created_time,
+    lastEditedTs: (page as any).last_edited_time,
+    contents,
+  }
+
+  console.dir(post, { depth: null })
+
+  return { props: { post } }
 }
 
-const Home = () => {
+const Home: NextPage<StaticProps> = ({ post }) => {
+  console.log(post)
   return <div></div>
 }
 
