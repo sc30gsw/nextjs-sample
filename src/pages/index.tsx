@@ -1,8 +1,10 @@
 import 'prismjs/themes/prism-tomorrow.css'
 
 import { Client } from '@notionhq/client'
+import type { QueryDatabaseResponse } from '@notionhq/client/build/src/api-endpoints'
 import dayjs from 'dayjs'
 import type { GetStaticProps, NextPage } from 'next'
+import Link from 'next/link'
 import prism from 'prismjs'
 import { useEffect } from 'react'
 
@@ -17,40 +19,49 @@ type StaticProps = {
   posts: Post[]
 }
 
-export const getPosts = async () => {
-  const database = await notion.databases.query({
-    // DB接続
-    database_id: process.env.NOTION_DATABASE_ID as string,
-    filter: {
-      and: [
-        {
-          // Publishedがtrueのフィールドのみ抽出
-          property: 'Published',
-          checkbox: {
-            equals: true,
+export const getPosts = async (slug?: string) => {
+  let database: QueryDatabaseResponse | undefined = undefined
+  if (slug) {
+    database = await notion.databases.query({
+      // DB接続
+      database_id: process.env.NOTION_DATABASE_ID as string,
+      filter: {
+        and: [
+          {
+            // Publishedがtrueのフィールドのみ抽出
+            property: 'Slug',
+            rich_text: {
+              equals: slug,
+            },
           },
+        ],
+      },
+    })
+  } else {
+    database = await notion.databases.query({
+      database_id: process.env.NOTION_DATABASE_ID as string,
+      filter: {
+        and: [
+          {
+            property: 'Published',
+            checkbox: {
+              equals: true,
+            },
+          },
+        ],
+      },
+      sorts: [
+        {
+          timestamp: 'created_time',
+          direction: 'descending',
         },
       ],
-    },
-    sorts: [
-      {
-        // ページの作成日時の降順
-        timestamp: 'created_time',
-        direction: 'descending',
-      },
-    ],
-  })
+    })
+  }
+
+  if (!database) return []
 
   const posts: Post[] = []
-
-  const blockResponse = await Promise.all(
-    database.results.map((page) => {
-      return notion.blocks.children.list({
-        block_id: page.id,
-      })
-    }),
-  )
-
   database.results.forEach((page, index) => {
     if (!('properties' in page)) {
       posts.push({
@@ -80,82 +91,101 @@ export const getPosts = async () => {
       slug = page.properties['Slug'].rich_text[0]?.plain_text ?? null
     }
 
-    const blocks = blockResponse[index]
-    const contents: Content[] = []
-    blocks.results.forEach((block) => {
-      if (!('type' in block)) {
-        return
-      }
-
-      switch (block.type) {
-        case 'paragraph':
-          contents.push({
-            type: 'paragraph',
-            text: block.paragraph.rich_text[0]?.plain_text ?? null,
-          })
-          break
-
-        case 'heading_2':
-          contents.push({
-            type: 'heading_2',
-            text: block.heading_2.rich_text[0]?.plain_text ?? null,
-          })
-
-          break
-
-        case 'heading_3':
-          contents.push({
-            type: 'heading_3',
-            text: block.heading_3.rich_text[0]?.plain_text ?? null,
-          })
-
-          break
-
-        case 'quote':
-          contents.push({
-            type: 'quote',
-            text: block.quote.rich_text[0]?.plain_text ?? null,
-          })
-          break
-
-        case 'code':
-          contents.push({
-            type: 'code',
-            text: block.code.rich_text[0]?.plain_text ?? null,
-            language: block.code.language,
-          })
-          break
-      }
-    })
     posts.push({
       id: page.id,
       title,
       slug,
       createdTs: (page as any).created_time,
       lastEditedTs: (page as any).last_edited_time,
-      contents,
+      contents: [],
     })
   })
   return posts
 }
 
+export const getPostContents = async (post: Post) => {
+  const blockResponse = await notion.blocks.children.list({
+    block_id: post.id,
+  })
+
+  const contents: Content[] = []
+  blockResponse.results.forEach((block) => {
+    if (!('type' in block)) {
+      return
+    }
+
+    switch (block.type) {
+      case 'paragraph':
+        contents.push({
+          type: 'paragraph',
+          text: block.paragraph.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'heading_2':
+        contents.push({
+          type: 'heading_2',
+          text: block.heading_2.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'heading_3':
+        contents.push({
+          type: 'heading_3',
+          text: block.heading_3.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'quote':
+        contents.push({
+          type: 'quote',
+          text: block.quote.rich_text[0]?.plain_text ?? null,
+        })
+
+        break
+
+      case 'code':
+        contents.push({
+          type: 'code',
+          text: block.code.rich_text[0]?.plain_text ?? null,
+          language: block.code.language,
+        })
+
+        break
+    }
+  })
+
+  return contents
+}
+
 export const getStaticProps: GetStaticProps<StaticProps> = async () => {
   const posts = await getPosts()
+  const contentsList = await Promise.all(
+    posts.map((post) => {
+      return getPostContents(post)
+    }),
+  )
+
+  posts.forEach((post, index) => {
+    post.contents = contentsList[index]
+  })
+
   return { props: { posts } }
 }
 
 const Home: NextPage<StaticProps> = ({ posts }) => {
-  useEffect(() => {
-    prism.highlightAll()
-  }, [])
-
-  if (!posts) return
-
   return (
     <div className="m-auto min-h-[100vh] max-w-[800px]">
       {posts.map((post) => (
         <div className="mb-4 p-2" key={post.id}>
-          <h1 className="my-4 text-2xl font-bold">{post.title}</h1>
+          <h1 className="my-4 text-2xl font-bold">
+            <Link href={`/post/${encodeURIComponent(post.slug ?? '')}`}>
+              {post.title}
+            </Link>
+          </h1>
           <div className="mb-2 flex justify-end">
             <div>
               <div className="mb-1 text-sm">
