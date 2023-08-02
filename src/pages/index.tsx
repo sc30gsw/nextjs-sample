@@ -1,12 +1,6 @@
-import 'prismjs/themes/prism-tomorrow.css'
-
 import { Client } from '@notionhq/client'
 import type { QueryDatabaseResponse } from '@notionhq/client/build/src/api-endpoints'
-import dayjs from 'dayjs'
 import type { GetStaticProps, NextPage } from 'next'
-import Link from 'next/link'
-import prism from 'prismjs'
-import { useEffect } from 'react'
 
 import { Layout } from '@/lib/component/Layout'
 import { PostComponent } from '@/lib/component/Post'
@@ -175,7 +169,7 @@ export const getStaticProps: GetStaticProps<StaticProps> = async () => {
     post.contents = contentsList[index]
   })
 
-  return { props: { posts } }
+  return { props: { posts }, revalidate: 60 }
 }
 
 const Home: NextPage<StaticProps> = ({ posts }) => {
