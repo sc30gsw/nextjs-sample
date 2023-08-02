@@ -1,11 +1,15 @@
 import dayjs from 'dayjs'
 import Link from 'next/link'
+import prism from 'prismjs'
 import type { FunctionComponent } from 'react'
-import React from 'react'
+import React, { useEffect } from 'react'
 
 import type { Post } from '@/types/post'
 
 export const PostComponent: FunctionComponent<{ post: Post }> = ({ post }) => {
+  useEffect(() => {
+    prism.highlightAll()
+  }, [post])
   return (
     <div className="mb-4 p-2" key={post.id}>
       <h1 className="my-4 text-2xl font-bold">
